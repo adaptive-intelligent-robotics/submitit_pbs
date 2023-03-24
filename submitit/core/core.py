@@ -930,6 +930,7 @@ class PicklingExecutor(Executor):
         with submission_file_path.open("w") as f:
             f.write(self._make_submission_file_text(command, tmp_uuid))
         command_list = self._make_submission_command(submission_file_path)
+        print(command_list)
         # run
         output = utils.CommandFunction(command_list, verbose=False)()  # explicit errors
         job_id = self._get_job_id_from_submission_command(output)

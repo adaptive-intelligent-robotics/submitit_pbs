@@ -353,25 +353,25 @@ class SlurmExecutor(core.PicklingExecutor):
         return nodes * tasks_per_node
 
     def _make_submission_command(self, submission_file_path: Path) -> List[str]:
-        return ["sbatch", str(submission_file_path)]
+        return ["echo",str(321)]#submission_file_path)]
 
     @staticmethod
     def _get_job_id_from_submission_command(string: Union[bytes, str]) -> str:
         """Returns the job ID from the output of sbatch string"""
         if not isinstance(string, str):
             string = string.decode()
-        output = re.search(r"job (?P<id>[0-9]+)", string)
+        output = re.search(r"[0-9]+", string)
         if output is None:
             raise utils.FailedSubmissionError(
                 f'Could not make sense of sbatch output "{string}"\n'
                 "Job instance will not be able to fetch status\n"
                 "(you may however set the job job_id manually if needed)"
             )
-        return output.group("id")
+        return output.group(0)
 
     @classmethod
     def affinity(cls) -> int:
-        return -1 if shutil.which("srun") is None else 2
+        return -1 if shutil.which("cat") is None else 2
 
 
 @functools.lru_cache()
