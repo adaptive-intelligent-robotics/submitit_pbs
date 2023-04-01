@@ -86,6 +86,7 @@ class JobEnvironment:
 
     @property
     def raw_job_id(self) -> str:
+        print(self._env)
         return os.environ[self._env["job_id"]]
 
     @property

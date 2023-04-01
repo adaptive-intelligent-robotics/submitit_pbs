@@ -50,6 +50,7 @@ class JobPaths:
     def __init__(
         self, folder: tp.Union[Path, str], job_id: tp.Optional[str] = None, task_id: tp.Optional[int] = None
     ) -> None:
+        print(f"const: {folder}")
         self._folder = Path(folder).expanduser().absolute()
         self.job_id = job_id
         self.task_id = task_id or 0
@@ -94,6 +95,13 @@ class JobPaths:
         return Path(replaced_path.replace("%A", array_id))
 
     def move_temporary_file(self, tmp_path: tp.Union[Path, str], name: str) -> None:
+        print("tomove")
+        print(tmp_path)
+        print("name")
+        print(name)
+        print("folder")
+        print(self.folder)
+        
         self.folder.mkdir(parents=True, exist_ok=True)
         Path(tmp_path).rename(getattr(self, name))
 

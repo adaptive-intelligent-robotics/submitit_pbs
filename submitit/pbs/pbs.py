@@ -33,7 +33,7 @@ class PbsInfoWatcher(core.InfoWatcher):
         to_check = {x.split("_")[0] for x in self._registered - self._finished}
         if not to_check:
             return None
-        command = ["qstat","-f", "-Fjson"]
+        command = ["qstat.bin","-f", "-Fjson"]
         for jid in to_check:
             command.extend(["-t", str(jid)])
         return command
@@ -50,8 +50,12 @@ class PbsInfoWatcher(core.InfoWatcher):
             one of "force" (forces a call), "standard" (calls regularly) or "cache" (does not call)
         """
         info = self.get_info(job_id, mode=mode)
+        
         #TODO CHECK THAT IT WORKS ON HPC
-        return "UNKNOWN"# info.get("jobs").get(job_id).get("job_state") or "UNKNOWN"
+        if isinstance(info, type(None)):
+            return info.get("jobs").get(job_id).get("job_state")
+        else:
+            return "UNKNOWN"            
 
     def read_info(self, string: Union[bytes, str]) -> Dict[str, Dict[str, str]]:
         """Reads the output of qstat and returns a dictionary containing main information"""
@@ -84,8 +88,16 @@ class PbsParseException(Exception):
 
 
 class PbsJobEnvironment(job_environment.JobEnvironment):
-
     _env = {
+        "job_id": "JOB_ID",
+        "num_tasks": "PBS_NOTDEFINED",
+        "num_nodes":"PBS_NOTDEFINED", 
+        "node": "PBS_NOTDEFINED",
+        "nodes": "PBS_NOTDEFINED",
+        "global_rank": "PBS_NOTDEFINED",
+        "local_rank": "PBS_NOTDEFINED",
+        "array_job_id": "PBS_NOTDEFINED",
+        "array_task_id": "PBS_NOTDEFINED",
     }
 
 
@@ -137,92 +149,88 @@ class PbsExecutor(core.PicklingExecutor):
         """Parameters that can be set through update_parameters"""
         return set(_get_default_parameters())
 
-#    def _convert_parameters(self, params: Dict[str, Any]) -> Dict[str, Any]:
-#        params = super()._convert_parameters(params)
-#        # replace type in some cases
-#        if "mem" in params:
-#            params["mem"] = _convert_mem(params["mem"])
-#        return params
-#
-#    def _internal_update_parameters(self, **kwargs: Any) -> None:
-#        """Updates sbatch submission file parameters
-#
-#        Parameters
-#        ----------
-#        See pbs documentation for most parameters.
-#        Most useful parameters are: time, mem, gpus_per_node, cpus_per_task, partition
-#        Below are the parameters that differ from pbs documentation:
-#
-#        signal_delay_s: int
-#            delay between the kill signal and the actual kill of the pbs job.
-#        setup: list
-#            a list of command to run in sbatch befure running qsub
-#        array_parallelism: int
-#            number of map tasks that will be executed in parallel
-#
-#        Raises
-#        ------
-#        ValueError
-#            In case an erroneous keyword argument is added, a list of all eligible parameters
-#            is printed, with their default values
-#
-#        Note
-#        ----
-#        Best practice (as far as Quip is concerned): cpus_per_task=2x (number of data workers + gpus_per_task)
-#        You can use cpus_per_gpu=2 (requires using gpus_per_task and not gpus_per_node)
-#        """
-#        defaults = _get_default_parameters()
-#        in_valid_parameters = sorted(set(kwargs) - set(defaults))
-#        if in_valid_parameters:
-#            string = "\n  - ".join(f"{x} (default: {repr(y)})" for x, y in sorted(defaults.items()))
-#            raise ValueError(
-#                f"Unavailable parameter(s): {in_valid_parameters}\nValid parameters are:\n  - {string}"
-#            )
-#        # check that new parameters are correct
-#        _make_jobfile_string(command="nothing to do", folder=self.folder, **kwargs)
-#        super()._internal_update_parameters(**kwargs)
-#
-#    def _internal_process_submissions(
-#        self, delayed_submissions: tp.List[utils.DelayedSubmission]
-#    ) -> tp.List[core.Job[tp.Any]]:
-#        if len(delayed_submissions) == 1:
-#            return super()._internal_process_submissions(delayed_submissions)
-#        # array
-#        folder = utils.JobPaths.get_first_id_independent_folder(self.folder)
-#        folder.mkdir(parents=True, exist_ok=True)
-#        timeout_min = self.parameters.get("time", 5)
-#        pickle_paths = []
-#        for d in delayed_submissions:
-#            pickle_path = folder / f"{uuid.uuid4().hex}.pkl"
-#            d.set_timeout(timeout_min, self.max_num_timeout)
-#            d.dump(pickle_path)
-#            pickle_paths.append(pickle_path)
-#        n = len(delayed_submissions)
-#        # Make a copy of the executor, since we don't want other jobs to be
-#        # scheduled as arrays.
-#        array_ex = PbsExecutor(self.folder, self.max_num_timeout)
-#        array_ex.update_parameters(**self.parameters)
-#        array_ex.parameters["map_count"] = n
-#        self._throttle()
-#
-#        first_job: core.Job[tp.Any] = array_ex._submit_command(self._submitit_command_str)
-#        tasks_ids = list(range(first_job.num_tasks))
-#        jobs: List[core.Job[tp.Any]] = [
-#            PbsJob(folder=self.folder, job_id=f"{first_job.job_id}_{a}", tasks=tasks_ids) for a in range(n)
-#        ]
-#        for job, pickle_path in zip(jobs, pickle_paths):
-#            job.paths.move_temporary_file(pickle_path, "submitted_pickle")
-#        return jobs
-#
-    @property
-    def _submitit_command_str(self) -> str:
+    def _internal_process_submissions(
+        self, delayed_submissions: tp.List[utils.DelayedSubmission]
+    ) -> tp.List[core.Job[tp.Any]]:
+        """Submits a task to the cluster.
+
+        Parameters
+        ----------
+        fn: callable
+            The function to compute
+        *args: any positional argument for the function
+        **kwargs: any named argument for the function
+
+        Returns
+        -------
+        Job
+            A Job instance, providing access to the job information,
+            including the output of the function once it is computed.
+        """
+        eq_dict = self._equivalence_dict()
+        timeout_min = self.parameters.get(eq_dict["timeout_min"] if eq_dict else "timeout_min", 5)
+        jobs = []
+        for idx, delayed in enumerate(delayed_submissions):
+            #tmp_uuid = uuid.uuid4().hex
+            paths = utils.JobPaths(folder=self.folder,job_id=str(idx)) #change later if we want something else than idx as job_id 
+            pickle_path = paths.folder / f"submitted_pickle"  #utils.JobPaths.get_first_id_independent_folder(self.folder) / f"{tmp_uuid}.pkl"
+            pickle_path.parent.mkdir(parents=True, exist_ok=True)
+            delayed.set_timeout(timeout_min, self.max_num_timeout)
+            delayed.dump(pickle_path)
+
+            job = self._submit_command(command=self._submitit_command_str(job_paths=paths), job_paths=paths)
+            job.paths.move_temporary_file(pickle_path, "submitted_pickle")
+            jobs.append(job)
+        return jobs
+
+    def _submit_command(self, command: str, job_paths: utils.JobPaths) -> core.Job[tp.Any]:
+        """Submits a command to the cluster
+        It is recommended not to use this function since the Job instance assumes pickle
+        files will be created at the end of the job, and hence it will not work correctly.
+        You may use a CommandFunction as argument to the submit function instead. The only
+        problem with this latter solution is that stdout is buffered, and you will therefore
+        not be able to monitor the logs in real time.
+
+        Parameters
+        ----------
+        command: str
+            a command string
+        job_paths: utils.JobPaths
+            a jobpaths object that contains all the relevant information about a job to be submitted.
+
+        Returns
+        -------
+        Job
+            A Job instance, providing access to the crun job information.
+            Since it has no output, some methods will not be efficient
+        """
+        tmp_uuid = uuid.uuid4().hex
+        submission_file_path = job_paths.folder  / f"submission_file_{tmp_uuid}.sh"
+        with submission_file_path.open("w") as f:
+            f.write(self._make_submission_file_text(command, tmp_uuid, job_paths))
+        job: Job[tp.Any] = self.job_class(folder=self.folder, job_id=job_paths.job_id)
+        print(f"job folder: {job.paths.folder}")
+        print(f"self folder: {self.folder}")
+        job.paths.move_temporary_file(submission_file_path, "submission_file") # is that still necessary?            
+        command_list = self._make_submission_command(job.paths.submission_file)
+
+        # run
+        output = utils.CommandFunction(command_list, verbose=False)()  # explicit errors
+        
+        #self._write_job_id(job.job_id, tmp_uuid)
+        #self._set_job_permissions(job.paths.folder)
+        return job
+
+
+
+    def _submitit_command_str(self, job_paths: utils.JobPaths) -> str:
         #TODO look into this to see how we can change sys executable into something more singuliarity-based
         return " ".join(
-            [shlex.quote(sys.executable), "-u -m submitit.core._submit", shlex.quote(str(self.folder))]
+            [shlex.quote(sys.executable), "-u -m submitit.core._submit", shlex.quote(str(job_paths.folder))]
         )
 
-    def _make_submission_file_text(self, command: str, uid: str) -> str:
-        return _make_jobfile_string(command=command, folder=self.folder, **self.parameters)
+    def _make_submission_file_text(self, command: str, uid: str, job_paths: utils.JobPaths) -> str:
+        return _make_jobfile_string(command=command, folder=self.folder, job_paths = job_paths, **self.parameters)
 
     def _num_tasks(self) -> int:
         print("HELLO")
@@ -232,10 +240,11 @@ class PbsExecutor(core.PicklingExecutor):
 
     def _make_submission_command(self, submission_file_path: Path) -> List[str]:
         #TODO CHANGE THIS
-        return ["echo", str("hello123")]#submission_file_path)]
+        return ["sh","-c",f"RANDOM=$$; echo $RANDOM; echo qsub {submission_file_path} >> launch_exp.sh"]
 
     @staticmethod
     def _get_job_id_from_submission_command(string: Union[bytes, str]) -> str:
+        print(f"string: {string}")
         """Returns the job ID from the output of qsub string"""
         if not isinstance(string, str):
             string = string.decode()
@@ -265,6 +274,7 @@ def _get_default_parameters() -> Dict[str, Any]:
 def _make_jobfile_string(
     command: str,
     folder: tp.Union[str, Path],
+    job_paths: utils.JobPaths,
     job_name: str = "submitit",
     partition: tp.Optional[str] = None,
     time: int = 5,
@@ -331,9 +341,11 @@ def _make_jobfile_string(
     """
 
     # add necessary parameters
-    paths = utils.JobPaths(folder=folder)
-    stdout = str(paths.stdout)
-    stderr = str(paths.stderr)
+    stdout = str(job_paths.stdout).replace("%t", "0")
+    stderr = str(job_paths.stderr).replace("%t", "0")
+        
+
+    print(f"STDOUT:{stdout}")
     # Job arrays will write files in the form  <ARRAY_ID>_<ARRAY_TASK_ID>_<TASK_ID>
     print("THIS IS THE COMMAND:")
     print(command)
@@ -357,7 +369,8 @@ def _make_jobfile_string(
                 f'#PBS -l walltime={time} \n'
                 f'#PBS -l select={nodes}:ncpus={cpus_per_task}:mem={mem}{gpu} \n'
                 f'{array} \n'
-                'export SUBMITIT_EXECUTOR=pbs \n'
+                f'export SUBMITIT_EXECUTOR=pbs \n'
+                f'export JOB_ID={job_paths.job_id} \n'
                 f'{command} \n'
                 )
     

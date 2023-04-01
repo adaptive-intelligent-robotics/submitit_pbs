@@ -347,16 +347,19 @@ class SlurmExecutor(core.PicklingExecutor):
     def _make_submission_file_text(self, command: str, uid: str) -> str:
         return _make_sbatch_string(command=command, folder=self.folder, **self.parameters)
 
+    
+    
     def _num_tasks(self) -> int:
         nodes: int = self.parameters.get("nodes", 1)
         tasks_per_node: int = max(1, self.parameters.get("ntasks_per_node", 1))
         return nodes * tasks_per_node
 
     def _make_submission_command(self, submission_file_path: Path) -> List[str]:
-        return ["echo",str(321)]#submission_file_path)]
+        return ["echo",str("12321")]#submission_file_path)]
 
     @staticmethod
     def _get_job_id_from_submission_command(string: Union[bytes, str]) -> str:
+        print(f"string slurm: {string}")
         """Returns the job ID from the output of sbatch string"""
         if not isinstance(string, str):
             string = string.decode()
