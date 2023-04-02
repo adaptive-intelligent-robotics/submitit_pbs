@@ -930,19 +930,12 @@ class PicklingExecutor(Executor):
         with submission_file_path.open("w") as f:
             f.write(self._make_submission_file_text(command, tmp_uuid))
         command_list = self._make_submission_command(submission_file_path)
-        print("that's the command_list")
-        print(command_list)
         # run
         output = utils.CommandFunction(command_list, verbose=False)()  # explicit errors
-        print("output")
-        print(output)
+
         job_id = self._get_job_id_from_submission_command(output)
         tasks_ids = list(range(self._num_tasks()))
         job: Job[tp.Any] = self.job_class(folder=self.folder, job_id=job_id, tasks=tasks_ids)
-        print("path")
-        print(submission_file_path)
-        print(f"job folder: {job.paths.folder}")
-        print(f"self folder: {self.folder}")
                     
         job.paths.move_temporary_file(submission_file_path, "submission_file")
         self._write_job_id(job.job_id, tmp_uuid)
