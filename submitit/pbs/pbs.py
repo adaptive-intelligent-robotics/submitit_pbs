@@ -196,7 +196,7 @@ class PbsExecutor(core.PicklingExecutor):
 
     def _make_submission_command(self, submission_file_path: Path) -> List[str]:
         #TODO CHANGE THIS
-        return ["sh","-c",f"RANDOM=$$; echo $RANDOM; echo qsub --cwd \`pwd\`  {submission_file_path} >> launch_exp.sh"]
+        return ["sh","-c",f"echo qsub -v START_PATH=\`pwd\`  {submission_file_path} >> launch_exp.sh"]
 
     @staticmethod
     def _get_job_id_from_submission_command(string: Union[bytes, str]) -> str: #is this used?
@@ -288,8 +288,7 @@ def _make_jobfile_string(
     """
 
     # add necessary parameters
-    stdout = str(job_paths.stdout).replace("%t", "0")
-    stderr = str(job_paths.stderr).replace("%t", "0")
+    stdout = os.path.relpath(str(job_paths.stdout).replace("%t", "0"))
     
     if ngpus == 0 or ngpus is None:
         gpu = ''
@@ -305,14 +304,14 @@ def _make_jobfile_string(
     template = ('#!/bin/bash \n'
                 f'#PBS -N {job_name} \n'
                 f'#PBS -o {stdout} \n'
-                f'#PBS -e {stderr} \n'
                 f'#PBS -j oe \n'
                 f'#PBS -l walltime={walltime} \n'
                 f'#PBS -l select={nodes}:ncpus={ncpus}:mem={mem_gb}gb{gpu} \n'
                 f'{array} \n'
+                f'cd $START_PATH \n'
                 f'export SUBMITIT_EXECUTOR=pbs \n'
                 f'export JOB_ID={job_paths.job_id} \n'
-                f'APPTAINERENV_CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES apptainer exec --pwd /project --cleanenv --containall --no-home -W apptainer/ -H /tmp --nv ./apptainer/container.sif {command} \n'
+                f'SINGULARITYENV_CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES singularity exec --pwd /project --cleanenv --containall --no-home -W apptainer/ -H /tmp --nv ./apptainer/container.sif {command} \n'
                 )
     
     return template
