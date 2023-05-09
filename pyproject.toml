@@ -3,9 +3,9 @@ requires = ["flit_core >=3.2,<4"]
 build-backend = "flit_core.buildapi"
 
 [project]
-name = "submitit"
+name = "submitit_pbs"
 readme = "README.md"
-authors = [{name = "Facebook AI Research"}]
+authors = [{name = "Orifinal authors: Facebook AI Research"}]
 requires-python = ">=3.6"
 dynamic = ["version", "description"]
 
@@ -21,8 +21,8 @@ classifiers=[
 ]
 
 [project.urls]
-  Source = "https://github.com/facebookincubator/submitit"
-  Tracker = "https://github.com/facebookincubator/submitit/issues"
+  Source = "https://github.com/adaptive-intelligent-robotics/submitit_pbs/"
+  Tracker = "https://github.com/adaptive-intelligent-robotics/submitit_pbs/issues"
 
 [project.optional-dependencies]
     dev = [
