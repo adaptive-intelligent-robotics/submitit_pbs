@@ -13,7 +13,7 @@ setup(
     long_description=(Path(__file__).parent / "README.md").read_text(),
     long_description_content_type="text/markdown",
     url="https://github.com/adaptive-intelligent-robotics/submitit_pbs/",
-#    packages=find_namespace_packages(include=["hydra_plugins.*"]),
+    packages=find_namespace_packages(include=["submitit.*"]),
     classifiers=[
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3.7",
