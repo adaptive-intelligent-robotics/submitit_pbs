@@ -6,7 +6,7 @@ from setuptools import find_namespace_packages, setup
 
 setup(
     name="submitit_pbs",
-    version=read_version("hydra_plugins/hydra_pbs_launcher", "__init__.py"),
+    version=read_version("submitit", "__init__.py"),
     author="Antoine Cully; Original authors: Jeremy Rapin, Jieru Hu, Omry Yadan",
     author_email="",
     description="PBS Submitit Launcher for Hydra apps",
